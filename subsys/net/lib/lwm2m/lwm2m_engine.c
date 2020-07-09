@@ -2202,6 +2202,9 @@ size_t lwm2m_engine_get_opaque_more(struct lwm2m_input_context *in,
 		in_len = buflen;
 	}
 
+	/* Make sure there is enough buffer for writing */
+	in_len = MIN(in_len, in->in_cpkt->max_len - in->offset);
+
 	in->opaque_len -= in_len;
 	if (in->opaque_len == 0U) {
 		*last_block = true;
