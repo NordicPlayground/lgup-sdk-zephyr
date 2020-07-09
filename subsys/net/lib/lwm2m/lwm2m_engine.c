@@ -2230,6 +2230,9 @@ static int lwm2m_write_handler_opaque(struct lwm2m_engine_obj_inst *obj_inst,
 	bool last_pkt_block = false, first_read = true;
 	int ret = 0;
 
+	/* Non-zero user_data implies on-going blockwise xfer */
+	first_read = (in->user_data == NULL);
+
 	while (!last_pkt_block && len > 0) {
 		if (first_read) {
 			len = engine_get_opaque(in, (u8_t *)data_ptr,
@@ -2332,6 +2335,12 @@ int lwm2m_write_handler(struct lwm2m_engine_obj_inst *obj_inst,
 							 data_ptr, data_len,
 							 last_block,
 							 total_size);
+			/* Ignore -EINVAL for CoAP blockwise transfers */
+			if (ret == -EINVAL && block_ctx != NULL) {
+				ret = 0;
+				break;
+			}
+
 			if (ret < 0) {
 				return ret;
 			}
@@ -3541,6 +3550,16 @@ static int handle_request(struct coap_packet *request,
 
 	case LWM2M_OP_WRITE:
 	case LWM2M_OP_CREATE:
+		if (block_ctx) {
+			/* Discard messages with duplicated MID. */
+			if (msg->mid == msg->ctx->mid_blk_bak) {
+				LOG_DBG("Duplicated mid=%d, so dropped.", msg->mid);
+				break;
+			}
+			
+			/* Backup MID */
+			msg->ctx->mid_blk_bak = msg->mid;
+		}
 		r = do_write_op(msg, format);
 		break;
 

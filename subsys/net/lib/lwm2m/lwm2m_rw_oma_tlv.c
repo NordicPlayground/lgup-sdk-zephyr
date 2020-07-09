@@ -95,6 +95,71 @@ struct tlv_out_formatter_data {
 	u8_t writer_flags;
 };
 
+struct oma_tlv_blockwise {
+	u16_t content_fmt;
+	struct lwm2m_obj_path path;
+	struct oma_tlv tlv;
+};
+
+static struct oma_tlv_blockwise *blockwise_context_alloc(struct lwm2m_ctx *ctx)
+{
+	int i;
+	struct oma_tlv_blockwise *p = NULL;
+
+	for (i = 0; i < CONFIG_LWM2M_NUM_BLOCK1_CONTEXT; i++) {
+		if (ctx->blockwise_ctx[i] != NULL) {
+			continue;
+		}
+
+		p = k_malloc(sizeof(struct oma_tlv_blockwise));
+		memset(p, 0, sizeof(struct oma_tlv_blockwise));
+		ctx->blockwise_ctx[i] = p;
+		break;
+	}
+
+	return p;
+}
+
+static void blockwise_context_free(struct lwm2m_ctx *ctx,
+				   struct oma_tlv_blockwise *bw_ctx)
+{
+	int i;
+
+	for (i = 0; i < CONFIG_LWM2M_NUM_BLOCK1_CONTEXT; i++) {
+		if (ctx->blockwise_ctx[i] != bw_ctx) {
+			continue;
+		}
+
+		k_free(ctx->blockwise_ctx[i]);
+		ctx->blockwise_ctx[i] = NULL;
+		break;
+	}
+}
+
+static struct oma_tlv_blockwise *blockwise_context_find_by_path(
+	struct lwm2m_ctx *ctx, struct lwm2m_obj_path *path)
+{
+	int i;
+	struct oma_tlv_blockwise *p;
+
+	for (i = 0; i < CONFIG_LWM2M_NUM_BLOCK1_CONTEXT; i++) {
+		if (ctx->blockwise_ctx[i] == NULL) {
+			continue;
+		}
+
+		p = ctx->blockwise_ctx[i];
+		if (p->content_fmt != LWM2M_FORMAT_OMA_TLV) {
+			continue;
+		}
+
+		if (!memcmp(&p->path, path, sizeof(struct lwm2m_obj_path))) {
+			return p;
+		}
+	}
+
+	return NULL;
+}
+
 static u8_t get_len_type(const struct oma_tlv *tlv)
 {
 	if (tlv->length < 8) {
@@ -893,15 +958,32 @@ int do_write_op_tlv(struct lwm2m_message *msg)
 	size_t len;
 	struct oma_tlv tlv;
 	int ret;
+	bool skip_init_read = false;
+	struct oma_tlv_blockwise *bw_ctx;
+
+	/* Restore blockwise context if it exists, & has the same type & path */
+	bw_ctx = blockwise_context_find_by_path(msg->ctx, &msg->path);
+	if (bw_ctx != NULL) {
+		memcpy(&tlv, &bw_ctx->tlv, sizeof(struct oma_tlv));
+		msg->in.opaque_len = len = tlv.length;
+		skip_init_read = true;
+
+		/* Non-zero user_data implies on-going blockwise xfer */
+		msg->in.user_data = bw_ctx;
+	}
 
 	while (true) {
 		/*
 		 * This initial read of TLV data won't advance frag/offset.
 		 * We need tlv.type to determine how to proceed.
 		 */
-		len = oma_tlv_get(&tlv, &msg->in, true);
-		if (len == 0) {
-			break;
+		if (skip_init_read) {
+			skip_init_read = false;
+		} else {
+			len = oma_tlv_get(&tlv, &msg->in, true);
+			if (len == 0) {
+				break;
+			}
 		}
 
 		if (tlv.type == OMA_TLV_TYPE_OBJECT_INSTANCE) {
@@ -969,6 +1051,29 @@ int do_write_op_tlv(struct lwm2m_message *msg)
 			}
 		}
 	}
+
+	msg->in.user_data = NULL;
+
+	/* Nothing to carry forward */
+	if (msg->in.opaque_len == 0) {
+		blockwise_context_free(msg->ctx, bw_ctx);
+		return 0;
+	}
+
+	/* Carry forward */
+	if (bw_ctx == NULL) {
+		bw_ctx = blockwise_context_alloc(msg->ctx);
+		if (bw_ctx == NULL) {
+			return -ENOMEM;
+		}
+	}
+
+	bw_ctx->content_fmt = LWM2M_FORMAT_OMA_TLV;
+	bw_ctx->tlv.type = tlv.type;
+	bw_ctx->tlv.id = tlv.id;
+	bw_ctx->tlv.length = msg->in.opaque_len;
+
+	memcpy(&bw_ctx->path, &msg->path, sizeof(struct lwm2m_obj_path));
 
 	return 0;
 }
