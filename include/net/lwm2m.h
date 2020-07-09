@@ -123,6 +123,12 @@ struct lwm2m_ctx {
 
 	/** Socket File Descriptor */
 	int sock_fd;
+
+	/** Backup of last known CoAP MID with blockwise payload inside */
+	u16_t mid_blk_bak;
+
+	/** Blockwise transfer context */
+	void *blockwise_ctx[CONFIG_LWM2M_NUM_BLOCK1_CONTEXT];
 };
 
 
