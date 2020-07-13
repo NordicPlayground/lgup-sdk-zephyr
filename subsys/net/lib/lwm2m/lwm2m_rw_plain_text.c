@@ -196,7 +196,10 @@ static size_t put_bool(struct lwm2m_output_context *out,
 
 static int get_length_left(struct lwm2m_input_context *in)
 {
-	return in->in_cpkt->offset - in->offset;
+	u16_t payload_len;
+	coap_packet_get_payload(in->in_cpkt, &payload_len);
+
+	return (int) payload_len;
 }
 
 static size_t plain_text_read_number(struct lwm2m_input_context *in,
