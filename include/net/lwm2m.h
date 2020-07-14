@@ -67,6 +67,14 @@
 typedef void (*lwm2m_socket_fault_cb_t)(int error);
 
 /**
+ * @brief Asynchronous callback for inserting extra CoAP options in
+ *        firmware pull messages
+ *
+ * @param[in] msg The message to be inserted with extra CoAP options
+ */
+typedef void (*lwm2m_fw_pull_opt_cb_t)(void *msg);
+
+/**
  * @brief LwM2M context structure to maintain information for a single
  * LwM2M connection.
  */
@@ -116,6 +124,9 @@ struct lwm2m_ctx {
 	 *  for more information.
 	 */
 	bool bootstrap_mode;
+
+	/** Firmware pull option callback */
+	lwm2m_fw_pull_opt_cb_t fw_pull_opt_cb;
 
 	/** Socket File Descriptor */
 	int sock_fd;
@@ -341,6 +352,29 @@ lwm2m_engine_execute_cb_t lwm2m_firmware_get_update_cb(void);
  * @param[out] ctx A buffer to store the block context.
  */
 struct coap_block_context *lwm2m_firmware_get_block_context();
+
+/**
+ * @brief Set callback for extra CoAP options in firmware pull
+ *
+ * NOTE: Should be called before writing URL to /5/0/1.
+ *
+ * @param[in] cb Callback for extra CoAP option insertion
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_firmware_set_opt_cb(lwm2m_fw_pull_opt_cb_t cb);
+
+/**
+ * @brief Remove callback for extra CoAP options in firmware pull
+ *
+ * NOTE: Should not be called during firmware upgrade
+ *
+ * @param[in] cb Callback for extra CoAP option insertion
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_firmware_remove_opt_cb(lwm2m_fw_pull_opt_cb_t cb);
+
 #endif
 #endif
 

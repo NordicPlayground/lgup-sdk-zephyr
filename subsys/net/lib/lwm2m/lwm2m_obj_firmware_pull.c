@@ -33,6 +33,7 @@ static struct lwm2m_ctx firmware_ctx = {
 };
 static int firmware_retry;
 static struct coap_block_context firmware_block_ctx;
+static lwm2m_fw_pull_opt_cb_t opt_cb = NULL;
 
 #if defined(CONFIG_LWM2M_FIRMWARE_UPDATE_PULL_COAP_PROXY_SUPPORT)
 #define COAP2COAP_PROXY_URI_PATH	"coap2coap"
@@ -73,6 +74,7 @@ static int transfer_request(struct coap_block_context *ctx,
 	struct http_parser_url parser;
 	uint16_t off, len;
 	char *next_slash;
+	char *next_a;
 #endif
 
 	msg = lwm2m_get_message(&firmware_ctx);
@@ -156,6 +158,35 @@ static int transfer_request(struct coap_block_context *ctx,
 			goto cleanup;
 		}
 	}
+
+	/* Query string */
+	off = parser.field_data[UF_QUERY].off;
+	len = parser.field_data[UF_QUERY].len;
+	cursor = firmware_uri + off;
+	while (len > 0 && (next_a = strchr(cursor, '&')) != NULL) {
+		if (next_a != cursor) {
+			ret = coap_packet_append_option(&msg->cpkt,
+				COAP_OPTION_URI_QUERY, cursor, next_a - cursor);
+			if (ret < 0) {
+				LOG_ERR("Error adding URI_QUERY");
+				goto cleanup;
+			}
+		}
+
+		/* skip & */
+		len -= (next_a - cursor) + 1;
+		cursor = next_a + 1;
+	}
+
+	if (len > 0) {
+		/* flush the rest */
+		ret = coap_packet_append_option(&msg->cpkt,
+			COAP_OPTION_URI_QUERY, cursor, len);
+		if (ret < 0) {
+			LOG_ERR("Error adding URI_QUERY");
+			goto cleanup;
+		}
+	}
 #endif
 
 	ret = coap_append_block2_option(&msg->cpkt, ctx);
@@ -180,6 +211,10 @@ static int transfer_request(struct coap_block_context *ctx,
 		goto cleanup;
 	}
 #endif
+
+	if (opt_cb) {
+		opt_cb(&msg->cpkt);
+	}
 
 	/* send request */
 	ret = lwm2m_send_message(msg);
@@ -484,4 +519,24 @@ int lwm2m_firmware_start_transfer(char *package_uri)
 struct coap_block_context *lwm2m_firmware_get_block_context()
 {
 	return &firmware_block_ctx;
+}
+
+int lwm2m_firmware_set_opt_cb(lwm2m_fw_pull_opt_cb_t cb)
+{
+	if (opt_cb != NULL) {
+		return -EEXIST;
+	}
+
+	opt_cb = cb;
+	return 0;
+}
+
+int lwm2m_firmware_remove_opt_cb(lwm2m_fw_pull_opt_cb_t cb)
+{
+	if (opt_cb != cb) {
+		return -ENOENT;
+	}
+
+	opt_cb = NULL;
+	return 0;
 }
