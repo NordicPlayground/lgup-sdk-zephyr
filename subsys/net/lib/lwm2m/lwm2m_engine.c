@@ -2168,7 +2168,7 @@ static int lwm2m_read_handler(struct lwm2m_engine_obj_inst *obj_inst,
 					&data_len);
 		}
 
-		if (!data_ptr || data_len == 0) {
+		if (!data_ptr || (data_len == 0 && msg->ctx->bootstrap_mode)) {
 			return -ENOENT;
 		}
 
