@@ -3437,6 +3437,16 @@ static int handle_request(struct coap_packet *request,
 			msg->operation = LWM2M_OP_WRITE;
 			msg->code = COAP_RESPONSE_CODE_CHANGED;
 		} else {
+#if defined(CONFIG_LGUP_ACK_ON_BS_FINISH)		
+			/* should send 2.04 when received bootstrap finish
+			   message */
+			if (msg->ctx->bootstrap_mode) {
+				msg->operation = LWM2M_OP_WRITE;			
+				msg->code = COAP_RESPONSE_CODE_CHANGED;
+				format = LWM2M_FORMAT_OMA_TLV;
+				break;
+			}
+#endif
 			msg->operation = LWM2M_OP_EXECUTE;
 			msg->code = COAP_RESPONSE_CODE_CHANGED;
 		}

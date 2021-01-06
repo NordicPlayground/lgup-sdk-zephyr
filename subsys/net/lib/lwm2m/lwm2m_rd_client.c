@@ -574,6 +574,23 @@ static int sm_do_bootstrap_reg(void)
 	coap_packet_append_option(&msg->cpkt, COAP_OPTION_URI_QUERY,
 				  query_buffer, strlen(query_buffer));
 
+	/* Insert custom bootstrap payload if it exists */
+	if (client.ctx->bootstrap_payload != NULL &&
+		client.ctx->bootstrap_payload_len != 0) {
+		ret = coap_packet_append_payload_marker(&msg->cpkt);
+		if (ret != 0) {
+			goto cleanup;
+		}
+
+		ret = coap_packet_append_payload(&msg->cpkt,
+			client.ctx->bootstrap_payload,
+			client.ctx->bootstrap_payload_len);
+		if (ret != 0) {
+			goto cleanup;
+		}
+
+	}
+
 	/* log the bootstrap attempt */
 	LOG_DBG("Register ID with bootstrap server as '%s'",
 		log_strdup(query_buffer));
@@ -685,6 +702,11 @@ static int sm_send_registration(bool send_obj_support_data,
 		/* TODO: handle return error */
 		coap_packet_append_option(&msg->cpkt, COAP_OPTION_URI_QUERY,
 					  query_buffer, strlen(query_buffer));
+	}
+
+	/* Callback for inserting extra options */
+	if (client.ctx->reg_msg_opt_cb != NULL) {
+		client.ctx->reg_msg_opt_cb(&msg->cpkt);
 	}
 
 	if (send_obj_support_data) {
@@ -929,6 +951,42 @@ static void lwm2m_rd_client_service(struct k_work *work)
 
 		}
 	}
+}
+
+int lwm2m_rd_client_set_bootstrap_payload(struct lwm2m_ctx *client_ctx,
+					   uint8_t *data, uint16_t len)
+{
+	if (client_ctx == NULL || data == NULL || len == 0) {
+		return -EINVAL;
+	}
+
+	client_ctx->bootstrap_payload = data;
+	client_ctx->bootstrap_payload_len = len;
+	return 0;
+}
+
+int lwm2m_rd_client_set_reg_msg_opt_cb(struct lwm2m_ctx *client_ctx,
+				       lwm2m_reg_msg_opt_cb_t cb)
+{
+	if (client_ctx == NULL || cb == NULL) {
+		return -EINVAL;
+	}
+
+	client_ctx->reg_msg_opt_cb = cb;
+	return 0;
+}
+
+int lwm2m_rd_client_remove_reg_msg_opt_cb(struct lwm2m_ctx *client_ctx,
+					  lwm2m_reg_msg_opt_cb_t cb)
+{
+	if (client_ctx == NULL || cb == NULL) {
+		return -EINVAL;
+	}
+
+	if (client_ctx->reg_msg_opt_cb == cb) {
+		client_ctx->reg_msg_opt_cb = NULL;
+	}
+	return 0;
 }
 
 void lwm2m_rd_client_start(struct lwm2m_ctx *client_ctx, const char *ep_name,
