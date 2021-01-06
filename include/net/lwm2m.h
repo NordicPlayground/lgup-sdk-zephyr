@@ -58,6 +58,14 @@
 #define IPSO_OBJECT_PUSH_BUTTON_ID			3347
 
 /**
+ * @brief Asynchronous callback for inserting extra CoAP options in
+ *        Registration message
+ *
+ * @param[in] msg The message to be inserted with extra CoAP options
+ */
+typedef void (*lwm2m_reg_msg_opt_cb_t)(void *msg);
+
+/**
  * @brief LwM2M context structure to maintain information for a single
  * LwM2M connection.
  */
@@ -96,6 +104,15 @@ struct lwm2m_ctx {
 	 *  for more information.
 	 */
 	bool bootstrap_mode;
+
+	/** Pointer to the custom bootstrap payload to be sent */
+	u8_t *bootstrap_payload;
+
+	/** Length of the custom bootstrap payload to be sent */
+	u16_t bootstrap_payload_len;
+
+	/** Registration message option callback */
+	lwm2m_reg_msg_opt_cb_t reg_msg_opt_cb;
 
 	/** This flag enables the context to handle an initial ACK after
 	 *  requesting a block of data, but a follow-up packet will contain
@@ -856,6 +873,46 @@ enum lwm2m_rd_client_event {
  */
 typedef void (*lwm2m_ctx_event_cb_t)(struct lwm2m_ctx *ctx,
 				     enum lwm2m_rd_client_event event);
+
+/**
+ * @brief Set custom bootstrap payload
+ *
+ * NOTE: Should be called before lwm2m_rd_client_start().
+ *
+ * @param[in] client_ctx LwM2M context
+ * @param[in] data Payload data
+ * @param[in] len Length of payload data
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_rd_client_set_bootstrap_payload(struct lwm2m_ctx *client_ctx,
+					  u8_t *data, u16_t len);
+
+/**
+ * @brief Set callback for extra CoAP options in registration message
+ *
+ * NOTE: Should be called before lwm2m_rd_client_start().
+ *
+ * @param[in] client_ctx LwM2M context
+ * @param[in] cb Callback for extra CoAP option insertion
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_rd_client_set_reg_msg_opt_cb(struct lwm2m_ctx *client_ctx,
+				       lwm2m_reg_msg_opt_cb_t cb);
+
+/**
+ * @brief Remove callback for extra CoAP options in registration message
+ *
+ * NOTE: Should be called after LWM2M_RD_CLIENT_EVENT_DISCONNECT
+ *
+ * @param[in] client_ctx LwM2M context
+ * @param[in] cb Callback for extra CoAP option insertion
+ *
+ * @return 0 for success or negative in case of error.
+ */
+int lwm2m_rd_client_remove_reg_msg_opt_cb(struct lwm2m_ctx *client_ctx,
+					  lwm2m_reg_msg_opt_cb_t cb);
 
 /**
  * @brief Start the LwM2M RD (Registration / Discovery) Client
